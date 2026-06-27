@@ -206,8 +206,9 @@ function onMotion(e){
   if(!measuring) return;
   const acc = e.accelerationIncludingGravity || e.acceleration || {};
   const g = 9.81;
-  // longitudinal = y axis (forward/back), lateral = x axis (left/right)
-  rawLongG = (acc.y || 0) / g;
+  // スマホ縦置き: 前後方向=y軸(縦G)、左右方向=x軸(横G)
+  // 縦置きでは加速度のy軸が重力方向になるためzを縦G、xを横Gとして使用
+  rawLongG = (acc.z || 0) / g;
   rawLatG  = (acc.x || 0) / g;
 }
 
@@ -318,11 +319,9 @@ function drawGGraph(){
     ctx.strokeStyle = v===0 ? '#2a2a2a' : '#181818';
     ctx.lineWidth = v===0 ? 1.5 : 1;
     ctx.beginPath(); ctx.moveTo(cx,y); ctx.lineTo(cx+gW,y); ctx.stroke();
-    if(v!==0 && Math.abs(v)===YMAX || v===0){
-      ctx.fillStyle='#3a3a3a'; ctx.font='8px sans-serif';
-      ctx.textAlign='right';
-      ctx.fillText(v===0?'0':v.toFixed(1), cx-3, y+3);
-    }
+    ctx.fillStyle='#ffffff'; ctx.font='bold 11px sans-serif';
+    ctx.textAlign='right';
+    ctx.fillText(v===0?'0':v.toFixed(1), cx-3, y+4);
   });
   
   // Time axis
@@ -330,9 +329,9 @@ function drawGGraph(){
     const x = cx + (i/5)*gW;
     ctx.strokeStyle='#181818'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(x,cy); ctx.lineTo(x,cy+gH); ctx.stroke();
-    ctx.fillStyle='#3a3a3a'; ctx.font='8px sans-serif';
+    ctx.fillStyle='#ffffff'; ctx.font='bold 11px sans-serif';
     ctx.textAlign='center';
-    ctx.fillText(`-${5-i}s`, x, cy+gH+10);
+    ctx.fillText(`-${5-i}s`, x, cy+gH+12);
   }
   
   // Plot function
