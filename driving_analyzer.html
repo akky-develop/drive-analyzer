@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DriveAnalyzer</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#0a0a0a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+  #app{display:flex;flex-direction:column;height:100vh;max-width:480px;margin:0 auto;padding:8px}
+  
+  /* Header */
+  #header{display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid #1e1e1e;margin-bottom:6px}
+  #appname{font-size:13px;font-weight:600;color:#888;letter-spacing:2px}
+  #score-area{display:flex;align-items:baseline;gap:4px}
+  #score-val{font-size:28px;font-weight:700;color:#00e676;transition:color 0.5s}
+  #score-label{font-size:11px;color:#555}
+  #rank-badge{font-size:13px;font-weight:700;padding:2px 8px;border-radius:4px;background:#1a2a1a;color:#00e676}
+  
+  /* Speed */
+  #speed-row{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:4px}
+  #speed-val{font-size:20px;font-weight:600;color:#ccc}
+  #speed-unit{font-size:11px;color:#555}
+  #gps-dot{width:7px;height:7px;border-radius:50%;background:#555}
+  #gps-dot.active{background:#00bcd4;animation:blink 1.5s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+  
+  /* Friction circle */
+  #friction-wrap{display:flex;justify-content:center;margin:4px 0 6px}
+  #friction-canvas{border-radius:50%;background:#0d0d0d}
+  
+  /* G graph */
+  #graph-wrap{flex:1;min-height:0;background:#0d0d0d;border-radius:8px;padding:6px 4px 4px;margin-bottom:6px;border:1px solid #1a1a1a;position:relative}
+  #graph-title{font-size:10px;color:#444;position:absolute;top:6px;left:8px}
+  #gLegend{position:absolute;top:6px;right:8px;display:flex;gap:10px}
+  .leg{font-size:10px;display:flex;align-items:center;gap:3px}
+  .leg-dot{width:8px;height:3px;border-radius:2px}
+  #g-canvas{display:block;width:100%;height:100%}
+  
+  /* Alert */
+  #alert-row{height:18px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+  #alert-text{font-size:11px;color:#ff5252;font-weight:600;opacity:0;transition:opacity 0.3s}
+  #alert-text.show{opacity:1}
+  
+  /* Stats row */
+  #stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+  .stat-card{background:#0f0f0f;border:1px solid #1e1e1e;border-radius:8px;padding:6px 4px;text-align:center}
+  .stat-val{font-size:16px;font-weight:600;color:#ccc}
+  .stat-label{font-size:9px;color:#444;margin-top:2px}
+  
+  /* Buttons */
+  #btn-row{display:flex;gap:10px;padding:4px 0 8px}
+  #startBtn,#stopBtn{flex:1;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:700;cursor:pointer;transition:opacity 0.2s,transform 0.1s;letter-spacing:1px}
+  #startBtn{background:#00e676;color:#0a0a0a}
+  #stopBtn{background:#ff5252;color:#fff;display:none}
+  #startBtn:active,#stopBtn:active{transform:scale(0.97)}
+  #startBtn:disabled{opacity:0.4;cursor:not-allowed}
+  
+  /* Summary */
+  #summary{display:none;background:#0f1a0f;border:1px solid #1a3a1a;border-radius:10px;padding:12px;margin-bottom:8px}
+  #sum-title{font-size:12px;color:#00e676;margin-bottom:8px;font-weight:600}
+  #sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+  .sum-item{background:#0d0d0d;border-radius:6px;padding:6px 8px}
+  .sum-item-label{font-size:10px;color:#555}
+  .sum-item-val{font-size:15px;font-weight:600;color:#ccc;margin-top:1px}
+  #sum-comment{font-size:11px;color:#888;line-height:1.5}
+  
+  /* Permission */
+  #perm-notice{display:none;background:#1a1000;border:1px solid #3a2500;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:11px;color:#f90;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <span id="appname">DRIVE ANALYZER</span>
+    <div id="score-area">
+      <span id="score-val">--</span>
+      <span id="score-label">pt</span>
+      <span id="rank-badge">--</span>
+    </div>
+  </div>
+
+  <div id="speed-row">
+    <span id="speed-val">0</span>
+    <span id="speed-unit">km/h</span>
+    <div id="gps-dot"></div>
+  </div>
+
+  <div id="perm-notice" id="perm-notice">
+    センサーへのアクセス許可が必要です。ブラウザの許可ダイアログで「許可」を選択してください。
+  </div>
+
+  <div id="friction-wrap">
+    <canvas id="friction-canvas" width="170" height="170"></canvas>
+  </div>
+
+  <div id="graph-wrap">
+    <div id="graph-title">G-FORCE (5秒)</div>
+    <div id="gLegend">
+      <span class="leg"><span class="leg-dot" style="background:#2196F3"></span>縦G</span>
+      <span class="leg"><span class="leg-dot" style="background:#f44336"></span>横G</span>
+    </div>
+    <canvas id="g-canvas"></canvas>
+  </div>
+
+  <div id="alert-row"><span id="alert-text"></span></div>
+
+  <div id="stats-row">
+    <div class="stat-card"><div class="stat-val" id="stat-maxG">0.00</div><div class="stat-label">最大G合成</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-jerk">0</div><div class="stat-label">急変動回数</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-time">0:00</div><div class="stat-label">経過時間</div></div>
+  </div>
+
+  <div id="summary">
+    <div id="sum-title">走行サマリー</div>
+    <div id="sum-grid">
+      <div class="sum-item"><div class="sum-item-label">最終スコア</div><div class="sum-item-val" id="sum-score">--</div></div>
+      <div class="sum-item"><div class="sum-item-label">ランク</div><div class="sum-item-val" id="sum-rank">--</div></div>
+      <div class="sum-item"><div class="sum-item-label">走行時間</div><div class="sum-item-val" id="sum-time">--</div></div>
+      <div class="sum-item"><div class="sum-item-label">急変動回数</div><div class="sum-item-val" id="sum-jerk">--</div></div>
+    </div>
+    <div id="sum-comment"></div>
+  </div>
+
+  <div id="btn-row">
+    <button id="startBtn" onclick="startMeasure()">▶ スタート</button>
+    <button id="stopBtn" onclick="stopMeasure()">■ ストップ</button>
+  </div>
+</div>
+
+<script>
+const FC = document.getElementById('friction-canvas');
+const FC_CTX = FC.getContext('2d');
+const GC = document.getElementById('g-canvas');
+const GC_CTX = GC.getContext('2d');
+
+let measuring = false;
+let motionPerm = false;
+let gpsWatchId = null;
+let animFrame = null;
+let startTime = null;
+let timerInterval = null;
+
+// Data
+const HISTORY_SEC = 5;
+const SAMPLE_HZ = 20;
+const MAX_PTS = HISTORY_SEC * SAMPLE_HZ;
+let longGArr = [], latGArr = [];
+let rawLongG = 0, rawLatG = 0;
+let speedKmh = 0;
+let currentScore = 85;
+let jerkCount = 0;
+let maxGMag = 0;
+let prevLongG = 0, prevLatG = 0;
+let scoreHistory = [];
+let trailPoints = []; // for friction circle trail
+
+// ---- Scoring system ----
+function computeScore(longG, latG) {
+  const mag = Math.sqrt(longG*longG + latG*latG);
+  // 1. Friction circle efficiency (how close to circular use vs overload)
+  const LIMIT = 0.4;
+  const efficiency = Math.min(mag / LIMIT, 1.0);
+  // 2. Jerk penalty (sudden changes)
+  const dL = Math.abs(longG - prevLongG);
+  const dLat = Math.abs(latG - prevLatG);
+  const jerk = Math.sqrt(dL*dL + dLat*dLat);
+  const jerkPenalty = Math.min(jerk * 80, 20);
+  // 3. Smoothness bonus
+  const smoothBonus = jerk < 0.01 ? 2 : 0;
+  // Score delta
+  let delta = (efficiency * 3) - jerkPenalty + smoothBonus;
+  if(jerk > 0.15){jerkCount++;showAlert('急激なG変動を検出');}
+  // Update max
+  if(mag > maxGMag) maxGMag = mag;
+  return delta;
+}
+
+function updateScore(delta){
+  currentScore = Math.max(0, Math.min(100, currentScore + delta * 0.05));
+  const v = Math.round(currentScore);
+  document.getElementById('score-val').textContent = v;
+  let rank, col;
+  if(v>=90){rank='S';col='#ffd700';}
+  else if(v>=75){rank='A';col='#00e676';}
+  else if(v>=60){rank='B';col='#2196F3';}
+  else if(v>=45){rank='C';col='#ff9800';}
+  else{rank='D';col='#f44336';}
+  document.getElementById('score-val').style.color = col;
+  document.getElementById('rank-badge').textContent = rank;
+  document.getElementById('rank-badge').style.color = col;
+}
+
+// ---- Alert ----
+let alertTimer = null;
+function showAlert(msg){
+  const el = document.getElementById('alert-text');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(alertTimer);
+  alertTimer = setTimeout(()=>el.classList.remove('show'), 2000);
+}
+
+// ---- Motion sensor ----
+function onMotion(e){
+  if(!measuring) return;
+  const acc = e.accelerationIncludingGravity || e.acceleration || {};
+  const g = 9.81;
+  // longitudinal = y axis (forward/back), lateral = x axis (left/right)
+  rawLongG = (acc.y || 0) / g;
+  rawLatG  = (acc.x || 0) / g;
+}
+
+// ---- GPS ----
+function startGPS(){
+  if(!navigator.geolocation) return;
+  let prevPos = null;
+  gpsWatchId = navigator.geolocation.watchPosition(pos=>{
+    document.getElementById('gps-dot').classList.add('active');
+    if(prevPos){
+      const dt = (pos.timestamp - prevPos.timestamp) / 1000;
+      if(dt > 0 && dt < 5){
+        const R = 6371000;
+        const lat1 = prevPos.coords.latitude * Math.PI/180;
+        const lat2 = pos.coords.latitude * Math.PI/180;
+        const dLat = lat2 - lat1;
+        const dLon = (pos.coords.longitude - prevPos.coords.longitude)*Math.PI/180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+        const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        speedKmh = (dist / dt) * 3.6;
+      }
+    }
+    prevPos = pos;
+    document.getElementById('speed-val').textContent = Math.round(speedKmh);
+  }, ()=>{}, {enableHighAccuracy:true, maximumAge:500, timeout:5000});
+}
+
+// ---- Draw Friction Circle ----
+function drawFriction(){
+  const ctx = FC_CTX;
+  const W = FC.width, H = FC.height;
+  const cx = W/2, cy = H/2;
+  const R = W/2 - 10;
+  ctx.clearRect(0,0,W,H);
+  
+  // BG circle
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2);
+  ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1.5; ctx.stroke();
+  
+  // Grid rings
+  [0.25,0.5,0.75,1.0].forEach(f=>{
+    ctx.beginPath(); ctx.arc(cx,cy,R*f,0,Math.PI*2);
+    ctx.strokeStyle = f===1.0 ? '#2a2a2a' : '#151515';
+    ctx.lineWidth = 1; ctx.stroke();
+    if(f===0.5||f===1.0){
+      ctx.fillStyle='#333'; ctx.font='9px sans-serif'; ctx.textAlign='left';
+      ctx.fillText(f.toFixed(1)+'G', cx+R*f+2, cy-2);
+    }
+  });
+  // Crosshairs
+  ctx.strokeStyle='#1a1a1a'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
+  // Labels
+  ctx.fillStyle='#333'; ctx.font='9px sans-serif';
+  ctx.textAlign='center'; ctx.fillText('減速',cx,cy-R+10);
+  ctx.fillText('加速',cx,cy+R-4);
+  ctx.textAlign='right'; ctx.fillText('左',cx-R+10,cy+3);
+  ctx.textAlign='left'; ctx.fillText('右',cx+R-4,cy+3);
+  
+  // Trail
+  const GSCALE = R / 1.2;
+  if(trailPoints.length > 1){
+    ctx.beginPath();
+    trailPoints.forEach((p,i)=>{
+      const x = cx + p.lat * GSCALE;
+      const y = cy - p.lon * GSCALE;
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle='rgba(0,230,118,0.2)'; ctx.lineWidth=1; ctx.stroke();
+  }
+  
+  // Dot
+  const px = cx + rawLatG * GSCALE;
+  const py = cy - rawLongG * GSCALE;
+  const mag = Math.sqrt(rawLongG**2 + rawLatG**2);
+  const hue = Math.min(mag/0.5, 1);
+  const r = Math.round(0 + hue*229), gb = Math.round(230 - hue*212);
+  ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2);
+  ctx.fillStyle = `rgb(${r},${gb},${gb > 50 ? gb : 0})`;
+  ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.stroke();
+}
+
+// ---- Draw G Graph ----
+function drawGGraph(){
+  const canvas = GC;
+  const ctx = GC_CTX;
+  const W = canvas.offsetWidth || 320;
+  const H = canvas.offsetHeight || 100;
+  if(canvas.width !== W) canvas.width = W;
+  if(canvas.height !== H) canvas.height = H;
+  
+  ctx.clearRect(0,0,W,H);
+  const PAD = {l:28,r:8,t:12,b:18};
+  const gW = W - PAD.l - PAD.r;
+  const gH = H - PAD.t - PAD.b;
+  const cx = PAD.l, cy = PAD.t;
+  
+  // BG
+  ctx.fillStyle='#0d0d0d'; ctx.fillRect(cx,cy,gW,gH);
+  
+  // Grid
+  const YMAX = 0.8;
+  [-YMAX,-0.4,0,0.4,YMAX].forEach(v=>{
+    const y = cy + gH/2 - (v/YMAX)*(gH/2);
+    ctx.strokeStyle = v===0 ? '#2a2a2a' : '#181818';
+    ctx.lineWidth = v===0 ? 1.5 : 1;
+    ctx.beginPath(); ctx.moveTo(cx,y); ctx.lineTo(cx+gW,y); ctx.stroke();
+    if(v!==0 && Math.abs(v)===YMAX || v===0){
+      ctx.fillStyle='#3a3a3a'; ctx.font='8px sans-serif';
+      ctx.textAlign='right';
+      ctx.fillText(v===0?'0':v.toFixed(1), cx-3, y+3);
+    }
+  });
+  
+  // Time axis
+  for(let i=0;i<=5;i++){
+    const x = cx + (i/5)*gW;
+    ctx.strokeStyle='#181818'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,cy); ctx.lineTo(x,cy+gH); ctx.stroke();
+    ctx.fillStyle='#3a3a3a'; ctx.font='8px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(`-${5-i}s`, x, cy+gH+10);
+  }
+  
+  // Plot function
+  function plotLine(arr, color){
+    if(arr.length < 2) return;
+    ctx.beginPath();
+    arr.forEach((v,i)=>{
+      const x = cx + (i/(MAX_PTS-1))*gW;
+      const y = cy + gH/2 - (v/YMAX)*(gH/2);
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin='round';
+    ctx.stroke();
+  }
+  plotLine(longGArr, '#2196F3');
+  plotLine(latGArr,  '#f44336');
+}
+
+// ---- Main loop ----
+let lastSample = 0;
+function loop(ts){
+  if(!measuring){ animFrame = null; return; }
+  animFrame = requestAnimationFrame(loop);
+  
+  const dt = ts - lastSample;
+  if(dt >= 1000/SAMPLE_HZ){
+    lastSample = ts;
+    // Smooth sensor
+    const alpha = 0.4;
+    const sLong = rawLongG * alpha + prevLongG * (1-alpha);
+    const sLat  = rawLatG  * alpha + prevLatG  * (1-alpha);
+    
+    longGArr.push(sLong); if(longGArr.length > MAX_PTS) longGArr.shift();
+    latGArr.push(sLat);   if(latGArr.length  > MAX_PTS) latGArr.shift();
+    trailPoints.push({lon:sLong, lat:sLat});
+    if(trailPoints.length > 60) trailPoints.shift();
+    
+    const delta = computeScore(sLong, sLat);
+    updateScore(delta);
+    scoreHistory.push(currentScore);
+    prevLongG = sLong; prevLatG = sLat;
+    
+    document.getElementById('stat-maxG').textContent = maxGMag.toFixed(2);
+    document.getElementById('stat-jerk').textContent = jerkCount;
+  }
+  
+  drawFriction();
+  drawGGraph();
+}
+
+// ---- Timer ----
+function updateTimer(){
+  if(!startTime) return;
+  const sec = Math.floor((Date.now()-startTime)/1000);
+  const m = Math.floor(sec/60), s = sec%60;
+  document.getElementById('stat-time').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+// ---- Start / Stop ----
+async function startMeasure(){
+  // iOS 13+ requires permission
+  if(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+    try{
+      const res = await DeviceMotionEvent.requestPermission();
+      if(res !== 'granted'){
+        document.getElementById('perm-notice').style.display='block';
+        return;
+      }
+    }catch(e){
+      document.getElementById('perm-notice').style.display='block';
+      return;
+    }
+  }
+  
+  // Reset
+  measuring = true;
+  currentScore = 85; jerkCount = 0; maxGMag = 0;
+  longGArr=[]; latGArr=[]; scoreHistory=[]; trailPoints=[];
+  prevLongG=0; prevLatG=0; speedKmh=0;
+  document.getElementById('score-val').textContent='85';
+  document.getElementById('stat-jerk').textContent='0';
+  document.getElementById('stat-maxG').textContent='0.00';
+  document.getElementById('summary').style.display='none';
+  document.getElementById('perm-notice').style.display='none';
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  
+  window.addEventListener('devicemotion', onMotion);
+  startGPS();
+  startTime = Date.now();
+  timerInterval = setInterval(updateTimer, 1000);
+  animFrame = requestAnimationFrame(loop);
+}
+
+function stopMeasure(){
+  measuring = false;
+  if(animFrame) cancelAnimationFrame(animFrame);
+  if(gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+  window.removeEventListener('devicemotion', onMotion);
+  clearInterval(timerInterval);
+  document.getElementById('gps-dot').classList.remove('active');
+  document.getElementById('startBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  
+  // Summary
+  const finScore = Math.round(currentScore);
+  const sec = Math.floor((Date.now()-startTime)/1000);
+  const m = Math.floor(sec/60), s = sec%60;
+  let rank, comment;
+  if(finScore>=90){rank='S';comment='非常に滑らかで理想的な運転です。摩擦円を効率よく使えています。';}
+  else if(finScore>=75){rank='A';comment='概ねスムーズな運転です。ブレーキのトレールオフをさらに意識すると向上します。';}
+  else if(finScore>=60){rank='B';comment='やや急激なG変動が見られます。ペダル操作をより丁寧に行いましょう。';}
+  else if(finScore>=45){rank='C';comment='急加減速が多めです。ブレーキの踏み増しを意識して改善しましょう。';}
+  else{rank='D';comment='急激なG変動が頻発しています。スムーズなペダル操作を心がけてください。';}
+  
+  document.getElementById('sum-score').textContent = finScore + 'pt';
+  document.getElementById('sum-rank').textContent = rank;
+  document.getElementById('sum-time').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  document.getElementById('sum-jerk').textContent = jerkCount + '回';
+  document.getElementById('sum-comment').textContent = comment;
+  document.getElementById('summary').style.display='block';
+  
+  // Keep last frame drawn
+  drawFriction(); drawGGraph();
+}
+
+// ---- Demo mode (no sensor) ----
+let demoMode = false;
+let demoT = 0;
+function enableDemoIfNeeded(){
+  if(typeof DeviceMotionEvent === 'undefined'){
+    demoMode = true;
+  }
+}
+enableDemoIfNeeded();
+
+// Real sensor check: listen for actual motion data for 2 seconds after start
+// If no real data arrives, fall back to demo
+function checkRealSensor(){
+  return new Promise(resolve => {
+    let gotReal = false;
+    const testHandler = (e) => {
+      const acc = e.accelerationIncludingGravity || {};
+      // Real sensor returns non-null, non-zero values
+      if(acc && (acc.x !== null || acc.y !== null || acc.z !== null)){
+        const mag = Math.sqrt((acc.x||0)**2+(acc.y||0)**2+(acc.z||0)**2);
+        if(mag > 0.01){ gotReal = true; }
+      }
+    };
+    window.addEventListener('devicemotion', testHandler);
+    setTimeout(()=>{
+      window.removeEventListener('devicemotion', testHandler);
+      resolve(gotReal);
+    }, 2000);
+  });
+}
+
+const _origLoop = loop;
+window._demoInterval = null;
+const _origStart = startMeasure;
+
+// Patch for demo
+if(demoMode){
+  window.startMeasure = async function(){
+    measuring = true; currentScore=85; jerkCount=0; maxGMag=0;
+    longGArr=[]; latGArr=[]; scoreHistory=[]; trailPoints=[];
+    prevLongG=0; prevLatG=0; demoT=0;
+    document.getElementById('score-val').textContent='85';
+    document.getElementById('stat-jerk').textContent='0';
+    document.getElementById('summary').style.display='none';
+    document.getElementById('startBtn').style.display='none';
+    document.getElementById('stopBtn').style.display='block';
+    startTime=Date.now();
+    timerInterval=setInterval(updateTimer,1000);
+    animFrame=requestAnimationFrame(loop);
+  };
+}
+
+const _origOnMotion = onMotion;
+function loopWithDemo(ts){
+  if(!measuring){animFrame=null;return;}
+  animFrame=requestAnimationFrame(loopWithDemo);
+  if(demoMode){
+    demoT += 0.05;
+    rawLongG = Math.sin(demoT*0.7)*0.3 + Math.sin(demoT*1.3)*0.1;
+    rawLatG  = Math.cos(demoT*0.5)*0.25 + Math.sin(demoT*2.1)*0.05;
+    speedKmh = 40 + Math.sin(demoT*0.3)*15;
+    document.getElementById('speed-val').textContent = Math.round(speedKmh);
+  }
+  const dt2 = ts - lastSample;
+  if(dt2 >= 1000/SAMPLE_HZ){
+    lastSample = ts;
+    const alpha=0.4;
+    const sLong = rawLongG*alpha + prevLongG*(1-alpha);
+    const sLat  = rawLatG*alpha  + prevLatG*(1-alpha);
+    longGArr.push(sLong); if(longGArr.length>MAX_PTS) longGArr.shift();
+    latGArr.push(sLat);   if(latGArr.length>MAX_PTS)  latGArr.shift();
+    trailPoints.push({lon:sLong,lat:sLat});
+    if(trailPoints.length>60) trailPoints.shift();
+    const delta=computeScore(sLong,sLat);
+    updateScore(delta);
+    scoreHistory.push(currentScore);
+    prevLongG=sLong; prevLatG=sLat;
+    document.getElementById('stat-maxG').textContent=maxGMag.toFixed(2);
+    document.getElementById('stat-jerk').textContent=jerkCount;
+  }
+  drawFriction(); drawGGraph();
+}
+
+// Override loop with demo-capable version
+window.loop = loopWithDemo;
+window.startMeasure = async function(){
+  // iOS permission request
+  if(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+    try{
+      const res=await DeviceMotionEvent.requestPermission();
+      if(res!=='granted'){document.getElementById('perm-notice').style.display='block';return;}
+    }catch(e){document.getElementById('perm-notice').style.display='block';return;}
+  }
+
+  // Reset state
+  measuring=false;
+  currentScore=85; jerkCount=0; maxGMag=0;
+  longGArr=[]; latGArr=[]; scoreHistory=[]; trailPoints=[];
+  prevLongG=0; prevLatG=0; demoT=0; speedKmh=0;
+  document.getElementById('score-val').textContent='85';
+  document.getElementById('stat-jerk').textContent='0';
+  document.getElementById('stat-maxG').textContent='0.00';
+  document.getElementById('summary').style.display='none';
+  document.getElementById('perm-notice').style.display='none';
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+
+  // Show checking message
+  const alertEl = document.getElementById('alert-text');
+  alertEl.textContent = 'センサー確認中...';
+  alertEl.classList.add('show');
+
+  // Attach sensor listener first, then check
+  window.addEventListener('devicemotion', onMotion);
+  const hasRealSensor = await checkRealSensor();
+  demoMode = !hasRealSensor;
+
+  alertEl.textContent = demoMode ? 'デモモードで起動' : 'センサー接続完了';
+  setTimeout(()=>alertEl.classList.remove('show'), 2000);
+
+  if(!demoMode){
+    startGPS();
+  } else {
+    // Remove real sensor listener if falling back to demo
+    window.removeEventListener('devicemotion', onMotion);
+  }
+
+  measuring=true;
+  startTime=Date.now();
+  timerInterval=setInterval(updateTimer,1000);
+  lastSample=0;
+  animFrame=requestAnimationFrame(loopWithDemo);
+};
+
+// Initial draw
+drawFriction();
+</script>
+</body>
+</html>
